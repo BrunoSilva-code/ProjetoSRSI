@@ -1,0 +1,45 @@
+
+services:
+  attacker:
+    image: mitm-lab-kali:latest
+    build: .
+    container_name: kali-attacker
+    ports:
+      - "127.0.0.1:6080:6080"
+    shm_size: "1gb"
+    restart: unless-stopped
+    volumes:
+      - kali-home:/home/kali
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    sysctls:
+      net.ipv4.ip_forward: "1"
+    networks:
+      mitm-lab:
+        ipv4_address: 172.19.0.2
+
+  victim:
+    image: mitm-lab-kali:latest
+    container_name: kali-victim
+    ports:
+      - "127.0.0.1:6081:6080"
+    shm_size: "1gb"
+    restart: unless-stopped
+    volumes:
+      - kali-victim-home:/home/kali
+    networks:
+      mitm-lab:
+        ipv4_address: 172.19.0.3
+
+volumes:
+  kali-home:
+  kali-victim-home:
+
+networks:
+  mitm-lab:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.19.0.0/24
+          gateway: 172.19.0.1
