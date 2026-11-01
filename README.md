@@ -72,6 +72,10 @@ No Wireshark do atacante, captura em `eth0` com o filtro:
 mysql
 ```
 
+> O filtro `mysql` só mostra conteúdo legível na ligação feita com `--skip-ssl`. Numa
+> ligação normal (com TLS) o tráfego aparece como `tls` e não é legível — o que serve
+> de prova da mitigação. Para isolar apenas a vítima podes usar `ip.addr == 172.19.0.3`.
+
 ### 3. Capturar o tráfego em claro
 
 Com o ataque a correr, repete a query no Cliente. No Wireshark: botão direito num
@@ -97,9 +101,12 @@ bloqueia o MAC do atacante com `nftables` e repõe a entrada ARP correta. Confir
 nft list ruleset        # deve mostrar  ether saddr <MAC_do_atacante> drop
 ```
 
-> **Nota sobre a base de dados:** a imagem usa MariaDB (compatível com o cliente
-> `mysql`). As ligações são em texto claro por omissão — é esse o cenário vulnerável
-> que queremos demonstrar. Como medida preventiva complementar pode ativar-se TLS.
+> **Nota sobre a cifra (importante):** a imagem usa MariaDB (compatível com o cliente
+> `mysql`/`mariadb`). Por omissão o cliente **negoceia TLS**, logo o tráfego vai
+> **cifrado** e o atacante, apesar de estar no meio, só vê dados ilegíveis. Por isso
+> a demonstração do cenário vulnerável **obriga** a ligar com `--skip-ssl`, que
+> desativa a cifra e simula uma aplicação mal configurada. O contrário — a ligação
+> normal, com TLS — é já uma mitigação: o atacante não consegue ler o tráfego.
 
 Para terminar o Ettercap, **Ctrl+C** no terminal onde está a correr.
 
