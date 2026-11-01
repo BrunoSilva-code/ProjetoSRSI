@@ -14,6 +14,7 @@ RUN apt update && apt install -y \
     firefox-esr \
     ettercap-graphical \
     wireshark \
+    mariadb-client \
     libcap2-bin \
     sudo \
     && apt clean

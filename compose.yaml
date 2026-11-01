@@ -32,9 +32,25 @@ services:
       mitm-lab:
         ipv4_address: 172.19.0.3
 
+  server:
+    image: mitm-lab-server:latest
+    build: ./server
+    container_name: mysql-server
+    shm_size: "512m"
+    restart: unless-stopped
+    volumes:
+      - server-db:/var/lib/mysql
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    networks:
+      mitm-lab:
+        ipv4_address: 172.19.0.4
+
 volumes:
   kali-home:
   kali-victim-home:
+  server-db:
 
 networks:
   mitm-lab:

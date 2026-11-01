@@ -1,6 +1,15 @@
 # Laboratório Kali em Docker
 
-Laboratório local com dois contentores Kali na rede Docker `mitm-lab`.
+Laboratório local com três contentores na rede Docker `mitm-lab`:
+
+| Papel | Contentor | Imagem | IP |
+|-------|-----------|--------|----|
+| Atacante (Kali, GUI) | `kali-attacker` | `mitm-lab-kali` | 172.19.0.2 |
+| Cliente / Vítima (Kali, GUI) | `kali-victim` | `mitm-lab-kali` | 172.19.0.3 |
+| Servidor MySQL + detetor | `mysql-server` | `mitm-lab-server` | 172.19.0.4 |
+
+> A interface de rede dentro dos contentores chama-se **`eth0`** (ao contrário das
+> VMs do VMware, onde seria `ens34`/`eth1`).
 
 ## Requisitos
 
@@ -27,21 +36,72 @@ Para parar os contentores:
 docker compose down
 ```
 
-## Teste de ARP Spoofing
+## Demonstração completa: MitM a uma ligação SQL
 
-No terminal do Kali atacante, inicia o Ettercap:
+O cenário é: o **Cliente** (vítima, `172.19.0.3`) liga-se à base de dados no
+**Servidor** (`172.19.0.4`); o **Atacante** (`172.19.0.2`) coloca-se no meio por ARP
+spoofing e lê o tráfego SQL em claro. O **detetor** corre no Servidor e reage.
+
+### 1. Ligação normal Cliente → Servidor
+
+No terminal do Kali **vítima** (faz de cliente), liga-te à BD. Usa `--skip-ssl`
+para simular a aplicação mal configurada (sem cifra) — é o que torna o tráfego
+legível para o atacante. Sem esta opção, o MariaDB negoceia TLS e o atacante só
+vê dados cifrados.
 
 ```bash
-sudo -n /usr/bin/ettercap -T -o -i eth0 -M arp:remote /172.19.0.3// /172.19.0.1//
+mariadb --skip-ssl -h 172.19.0.4 -u app -psenha123 loja      # password: senha123
 ```
 
-No Wireshark do atacante, captura em `eth0`. Para filtrar o tráfego da vítima, usa:
+```sql
+SELECT * FROM clientes;     -- mostra a Ana (100.00) e o Bruno (250.00)
+EXIT;
+```
+
+### 2. Ataque (no Kali atacante)
+
+Inicia o Ettercap a envenenar o Cliente **e** o Servidor:
+
+```bash
+sudo -n /usr/bin/ettercap -T -o -i eth0 -M arp:remote /172.19.0.3// /172.19.0.4//
+```
+
+No Wireshark do atacante, captura em `eth0` com o filtro:
 
 ```text
-ip.addr == 172.19.0.3
+mysql
 ```
 
-Gera tráfego no browser do Kali vítima. Para terminar o Ettercap, carrega em **Ctrl+C** no terminal onde está a correr.
+### 3. Capturar o tráfego em claro
+
+Com o ataque a correr, repete a query no Cliente. No Wireshark: botão direito num
+pacote → **Follow → TCP Stream**. Vê-se a query `SELECT * FROM clientes` e os dados
+em texto claro. (Alternativa sem GUI, no atacante: `sudo tcpdump -i eth0 -A 'tcp port 3306'`.)
+
+### 4. Deteção e mitigação (no Servidor)
+
+Entra no container do servidor e corre o detetor:
+
+```powershell
+docker exec -it mysql-server bash
+```
+
+```bash
+python3 /root/detetor_arp.py
+```
+
+Quando o ataque arranca, o detetor aprende os MACs reais, deteta a troca de MAC,
+bloqueia o MAC do atacante com `nftables` e repõe a entrada ARP correta. Confirma com:
+
+```bash
+nft list ruleset        # deve mostrar  ether saddr <MAC_do_atacante> drop
+```
+
+> **Nota sobre a base de dados:** a imagem usa MariaDB (compatível com o cliente
+> `mysql`). As ligações são em texto claro por omissão — é esse o cenário vulnerável
+> que queremos demonstrar. Como medida preventiva complementar pode ativar-se TLS.
+
+Para terminar o Ettercap, **Ctrl+C** no terminal onde está a correr.
 
 ## Notas
 
